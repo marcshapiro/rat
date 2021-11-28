@@ -1,0 +1,2 @@
+let pi = 3.14159265358793238462643383279502884197169399375;
+say('pi is approximately', as_text(pi))

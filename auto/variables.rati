@@ -1,0 +1,4 @@
+--arg eval(not_a_variable)
+--rv 1
+--err
+not_a_variable: not a variable

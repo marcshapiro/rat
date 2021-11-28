@@ -1,0 +1,8 @@
+say('rat <options> <script>');
+say('-sys | -std | -usr | -my # use path of function called at end of script');
+say('-quiet | -text | -decNNN # control how result is displayed');
+say('-time # show load and run time of script');
+say('-v # show rat version');
+say('-h # shot this help');
+say('-- # treat next argument as script, even if it starts with -');
+

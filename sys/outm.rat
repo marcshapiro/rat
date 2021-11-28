@@ -1,0 +1,5 @@
+# out # multiple args
+function (...);
+each arg in args {
+    out(arg)
+};

@@ -1,0 +1,3 @@
+use sys reduce;
+function (inList);
+reduce(inList, op_mul, 1)

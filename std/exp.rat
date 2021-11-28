@@ -1,0 +1,31 @@
+# compute approximation y such that |y-e^x| <= eps
+use sys abs;
+function (x, eps);
+
+mutable y = 1; # result
+mutable dy = 0; # change in result
+mutable n = 0; # loop index
+mutable nf = 1; # n!
+mutable xn = 1; # x^n
+
+mutable ady = 0; # abs(dy)
+mutable pdy = 1; # previous ady
+mutable r = 0; # ady/pdy
+
+loop {
+    update n = n + 1;
+    update nf = nf * n;
+    update xn = xn * x;
+
+    update dy = xn/nf;
+    update y = y + dy;
+
+    update ady = abs(dy);
+    update r = ady/pdy;
+    if r < 1 {
+        if ady*r/(1-r) <= eps { break; }; # no idea if this is legit
+    };
+    update pdy = ady;
+};
+
+y

@@ -1,0 +1,6 @@
+# out # multiple args # newline terminator
+function (...);
+each arg in args {
+    out(arg)
+};
+out(list[10])

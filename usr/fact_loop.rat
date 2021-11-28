@@ -1,0 +1,9 @@
+function fact(n);
+mutable f = 1;
+mutable i = 1;
+loop {
+    if n <= i { break; };
+    update f = f * i;
+    update i = i + 1;
+};
+f

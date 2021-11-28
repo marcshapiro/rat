@@ -1,0 +1,17 @@
+use usr as_decimal;
+let pi = 3.141592653587932384626433832795028841971693993751058209749445923078164062862089986280348253421170679;
+mutable den = 1;
+mutable best_err = inf;
+mutable num = 0;
+mutable err = 0;
+loop {
+    update num = round(den*pi);
+    update err = pi - num/den;
+    if err < 0 { update err = -err; };
+    if err < best_err {
+        say('Approx', as_text(num/den), 'approx', as_decimal(num/den, 20));
+        if 0 == err { break; }; # unlikely # control-C will exit earlier
+        update best_err = err;
+    };
+    update den = den + 1;
+}

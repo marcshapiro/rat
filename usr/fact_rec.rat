@@ -1,0 +1,8 @@
+function fact(n);
+if 0 == n { return 1; };
+return n * fact(n - 1);
+
+# time ./target/release/rat -usr fact_rec 2160 # about 2 seconds
+# time ./target/release/rat -usr fact_loop 2160 # about 2 seconds, very slighly faster
+# time ./target/release/rat -usr fact_loop 3000 # about 5 seconds
+# time ./target/release/rat -usr fact_loop 4000 # about 13 seconds

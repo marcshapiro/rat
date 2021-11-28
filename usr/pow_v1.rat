@@ -1,0 +1,8 @@
+# NB: works for rational n, but can be very expensive
+
+use sys is_finite;
+use std root;
+
+function(x, n, eps);
+if !is_finite(n) { return x^n; };
+root(x ^ numerator(n), denominator(n), eps);

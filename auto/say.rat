@@ -1,0 +1,12 @@
+# out # multiple args # space separator # newline terminator
+function (...);
+mutable later = 0;
+each arg in args {
+    if later {
+        out(' ');
+    } else {
+        update later = 1;
+    };
+    out(arg)
+};
+out(list[10])

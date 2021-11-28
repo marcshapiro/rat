@@ -1,0 +1,2 @@
+use sys all;
+all(list[1, 1])

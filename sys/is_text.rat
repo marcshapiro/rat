@@ -1,0 +1,6 @@
+use std all; # FIXME: sys should not depend on std
+use sys every;
+use sys is_char;
+function (L);
+# FIXME: test for list??
+all(every(L, is_char))

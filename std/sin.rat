@@ -1,0 +1,30 @@
+# compute approximation y such that |y-sin(x)| <= eps
+use sys abs;
+function (x, eps);
+
+# NB: this is slow for pi << abs(x)
+
+let x2 = x * x;
+mutable y = x; # result
+mutable dy = 0; # change in result
+mutable m = 1; # 2n + 1
+mutable nf = 1; # (2n+1)!
+mutable xn = x; # x^(2n+1)
+mutable sgn = 1; # (-1)^n
+
+loop {
+    update m = m + 2;
+    update nf = nf * (m - 1) * m;
+    update xn = xn * x2;
+    update sgn = sgn * -1;
+
+    update dy = sgn * xn / nf;
+    update y = y + dy;
+
+#    say('m:', as_text(m), 'nf:', as_text(nf), 'xn:', as_text(xn),
+#        'sgn', as_text(sgn), 'dy:', as_text(dy));
+
+    if abs(dy) < eps { break; };
+};
+
+y

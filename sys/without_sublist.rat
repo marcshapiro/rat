@@ -1,0 +1,3 @@
+use sys replace_sublist;
+function (inList, startIx, oldSubLen, newSublist);
+replace_sublist(inList, startIx, oldSubLen, list[]);

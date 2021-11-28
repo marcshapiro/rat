@@ -1,0 +1,12 @@
+--par 3, 5
+1
+--par 5, 3
+0
+--par 'abc', 'def'
+1
+--par 'abc', 'abc'
+1
+--par 'abcd', 'abc'
+0
+--par 'abc', 'abcd'
+1

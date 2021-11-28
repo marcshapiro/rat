@@ -1,0 +1,73 @@
+# _Lost in a Big, Empty Room_ was designed by Todd Turnidge.
+use sys inputkey;
+mutable x = 2; # x coord
+mutable y = 2; # y coord
+mutable g = 0; # gold coin count
+mutable cmd = ''; # input
+mutable go = 1; # true after a valid command
+let ew_size = 5; # room dimensions # Note: The room is not really big.
+let ns_size = 5;
+say('Hello.  You are lost in a big, empty room.');
+loop {
+    say('  You are (', as_text(x), ',', as_text(y),
+        ') steps from the (west, north) wall');  # Note: You are not really lost.
+    if 0 < g {
+        say('  You have', as_text(g), 'gold coins.');
+    };
+    update go = 0;
+    update cmd = inputkey('Your wish is a command [newsq]> ');
+    case list[cmd] {
+       'e' => {
+            if x < ew_size {
+                update x = x + 1;
+                update go = 1;
+            } else {
+                say('!!  That is the east wall.')
+            }
+        };
+       'n' => {
+            if y < ns_size {
+                update y = y + 1;
+                update go = 1
+            } else {
+                say('!!  That is the north wall.')
+            }
+        };
+       'q' => {
+            say('You give up and lose the game.');
+            return
+        };
+       's' => {
+            if 1 < y {
+                update y = y - 1;
+                update go = 1
+            } else {
+                say('!!  That is the south wall.')
+            }
+        };
+       'w' => {
+            if 1 < x {
+                update x = x - 1;
+                update go = 1
+            } else {
+                say('!!  That is the west wall.')
+            }
+        }
+    } else {
+        say('!! That made no sense to me.')
+    };
+    if go {
+        case list[x, y] {
+            list[4, 4] => {
+                say('**  You found a gold coin!'); # Note: The room is not really empty.
+                update g = g + 1;
+            };
+            list[1, 5] => {
+                say('**  You found the exit and left the big, empty room.');
+                break;
+            }
+        }
+    }
+};
+say('Goodbye.');
+g

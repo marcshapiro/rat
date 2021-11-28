@@ -1,0 +1,55 @@
+use sys is_finite;
+use sys is_int;
+use sys is_rat;
+use sys modulo;
+use sys sign;
+
+function(xIn, nIn, eps);
+must(is_rat(xIn), 'root: not a Rat');
+must(is_int(nIn), 'root: not an Int');
+
+mutable x = xIn;
+mutable n = nIn;
+
+if nan == x || 1 == x { return x; };
+
+if n < 0 {
+    update n = -n;
+    update x = 1/x;
+};
+
+if 0 == x || !is_finite(x) { return x; };
+
+let sgn = sign(x);
+if -1 == sgn {
+    must(1 == modulo(n, 2), 'root: no even roots for negative numbers');
+    update x = -x;
+};
+
+mutable ylo = 1;
+mutable yhi = x;
+if yhi < ylo {
+    update ylo = x;
+    update yhi = 1;
+};
+
+
+mutable yn = 0;
+mutable xn = 0;
+loop {
+    if yhi - ylo <= eps { break; };
+
+    # step # TODO: try variants ***********
+    update yn = (ylo + yhi) / 2;
+
+    update xn = yn ^ n;
+    if xn <= x { update ylo = yn; };
+    if x <= xn { update yhi = yn; };
+};
+
+sgn *
+    if x - ylo ^ n <= yhi ^ n - x {
+        ylo
+    } else {
+        yhi
+    }

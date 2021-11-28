@@ -1,0 +1,35 @@
+# compute approximation y such that |y-atan(x)| <= eps
+use sys abs;
+function (x, eps);
+
+must(abs(x) <= 1, 'Does not converge for 1 < abs(x)');
+
+# NB: This is very slow for x = +-1 or close
+
+let x2 = x * x;
+mutable y = x; # result
+mutable dy = 0; # change in result
+mutable dy1 = 0; # change for one n
+mutable dy2 = 0; # change for next n
+mutable m = 1; # 2n + 1
+mutable xn = x; # x^(2n+1)
+
+loop {
+    update m = m + 2;
+    update xn = xn * x2;
+    update dy1 = xn / m;
+
+    update m = m + 2;
+    update xn = xn * x2;
+    update dy2 = xn / m;
+
+    update dy = dy2 - dy1;
+    update y = y + dy;
+
+    # say('m:', as_text(m), 'xn:', as_text(xn), 'dy:', as_text(dy));
+
+    # NB: faster than dy1, slower than dy # need better test
+    if abs(dy1) < eps { break; };
+};
+
+y

@@ -1,0 +1,3 @@
+use sys gbye;
+function (msg);
+gbye(catenate('NYI: ', msg));

@@ -1,0 +1,2 @@
+use sys inkey;
+say(list[inkey(0)]);

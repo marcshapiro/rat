@@ -1,0 +1,4 @@
+function (a, b);
+let q = round(a/b);
+let e = a - q*b;
+if e < 0 { b + e } else { e }

@@ -1,0 +1,6 @@
+use sys inkey;
+function (prompt);
+out(prompt);
+let result = inkey(1);
+say();
+result

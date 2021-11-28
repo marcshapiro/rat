@@ -1,0 +1,5 @@
+function (x);
+if x == nan { return nan; };
+if x < 0 { return -1; };
+if 0 < x { return 1; };
+0

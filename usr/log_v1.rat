@@ -1,0 +1,38 @@
+# NB: this doesn't work well because pow_v1 is slow with rational powers.
+
+use sys is_finite;
+use usr pow_v1 as pow;
+function (xIn, b, eps); # y such that pow(b, y) ~ x
+
+must(is_finite(xIn) && is_finite(b), 'log: NYI: non-finite');
+must(0 < xIn, 'log: x not Positive');
+must(1 < b, 'log: need 1 < b');
+
+if 1 == xIn { return 0; };
+let recip = xIn < 1;
+let x = if recip { 1/xIn } else { xIn };
+let sgn = if recip { -1 } else { 1 };
+
+mutable ylo = 0;
+mutable yhi = if 2 < b { x } else { x / (b - 1) };
+must(x <= pow(b, yhi, eps), 'FIXME: bad upper bound');
+
+mutable yn = 0;
+mutable xn = 0;
+loop {
+    if yhi - ylo <= eps { break; };
+
+    # step # TODO: try variants ***********
+    update yn = (ylo + yhi) / 2;
+
+    update xn = pow(b, yn, eps);
+    if xn <= x { update ylo = yn; };
+    if x <= xn { update yhi = yn; };
+};
+
+sgn *
+    if x - pow(b, ylo, eps) <= pow(b, yhi, eps) - x {
+        ylo
+    } else {
+        yhi
+    }

@@ -1,0 +1,17 @@
+function (inList, startIx, oldSubLen, newSublist);
+let head =
+    if 1 < startIx {
+        sublist(inList, 1, startIx - 1);
+    } else {
+        list[];
+    };
+let oldLen = length(inList);
+let tailIx = startIx + oldSubLen;
+let tailLen = oldLen - tailIx + 1;
+let tail =
+    if 0 == tailLen {
+        list[];
+    } else {
+        sublist(inList, tailIx, tailLen);
+    };
+catenate(catenate(head, newSublist), tail);

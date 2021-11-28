@@ -1,0 +1,18 @@
+function fib(n);
+if n <= 1 { return 1; };
+mutable known = list[1, 2];
+mutable i = 3;
+loop {
+    if (n < i) { break; };
+    update known = catenate(
+                    known,
+                    list[element(known, i - 1) + element(known, i - 2)]
+            );
+    update i = i + 1;
+};
+element(known, n);
+
+# time ./target/release/rat -usr fib_loop 1500 # 1s
+# time ./target/release/rat -usr fib_loop 2100 # 2s
+# time ./target/release/rat -usr fib_loop 3000 # 4s
+# time ./target/release/rat -usr fib_loop 4200 # 8s

@@ -1,0 +1,20 @@
+# convert to decimal text, to specified number of places.
+use sys insert_sublist;
+use sys is_finite;
+function (r, nplaces);
+if !is_finite(r) { return as_text(r); };
+let sgn = if r < 0 { -1 } else { 1 };
+let den = 10^nplaces;
+let num = round(sgn*r*den);
+mutable s = as_text(num);
+mutable leading = nplaces + 1 - length(s);
+loop {
+    if leading <= 0 { break; };
+    update s = insert_sublist(s, 1, '0');
+    update leading = leading - 1;
+};
+update s = insert_sublist(s, length(s) - nplaces + 1, '.');
+if r < 0 {
+    update s = insert_sublist(s, 1, '-');
+};
+s

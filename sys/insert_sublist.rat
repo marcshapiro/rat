@@ -1,0 +1,7 @@
+use sys replace_sublist;
+function (inList, startIx, newSublist);
+if length(inList) < startIx {
+    catenate(inList, newSublist);
+} else {
+    replace_sublist(inList, startIx, 0, newSublist);
+};

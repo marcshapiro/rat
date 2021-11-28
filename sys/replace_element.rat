@@ -1,0 +1,3 @@
+use sys replace_sublist;
+function (inList, ix, elt);
+replace_sublist(inList, ix, 1, list[elt]);

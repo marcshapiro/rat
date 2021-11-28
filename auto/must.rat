@@ -1,0 +1,5 @@
+use sys gbye;
+function(c, msg);
+if !c {
+    gbye(msg);
+}

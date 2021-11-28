@@ -1,0 +1,6 @@
+function (inList, func, elt0);
+mutable acc = elt0;
+each elt in inList {
+    update acc = func(acc, elt);
+};
+acc

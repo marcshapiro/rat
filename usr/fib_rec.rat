@@ -1,0 +1,8 @@
+function fib(n);
+if n <= 1 { return 1; };
+fib(n - 1) + fib(n - 2)
+
+# time ./target/release/rat -usr fib_rec 22 # 2s
+# time ./target/release/rat -usr fib_rec 23 # 3s
+# time ./target/release/rat -usr fib_rec 24 # 5s
+# time ./target/release/rat -usr fib_rec 25 # 8s

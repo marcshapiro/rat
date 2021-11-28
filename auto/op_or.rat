@@ -1,0 +1,2 @@
+function (a, lazy b);
+if a { 1 } else { b }

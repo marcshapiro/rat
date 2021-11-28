@@ -1,0 +1,8 @@
+function (inList, func);
+mutable outList = list[];
+each elt in inList {
+    if func(elt) {
+        update outList = outList + elt;
+    };
+};
+outList
