@@ -9,18 +9,24 @@ rbuild:
 
 # run default function
 run:
-	RUST_BACKTRACE=1 cargo run -- -time -dec40 -std "root(2, 2, 1e-30)"
+	RUST_BACKTRACE=1 cargo run -- -std "root(2, 2, 1e-3)"
 
 # run with version
 runv:
 	RUST_BACKTRACE=1 cargo run -- -v
 
 # run with no params
-runx:
+repl:
 	RUST_BACKTRACE=1 cargo run
+
+rrepl:
+	RUST_BACKTRACE=1 cargo run --release
 
 rrun:
 	RUST_BACKTRACE=1 cargo run --release -- -time -dec40 -std "root(2, 2, 1e-30)"
+
+liaber:
+	cargo run -- -my "liaber()"
 
 wc:
 	@./wc.py
@@ -53,6 +59,7 @@ cov:
 doc:
 	cargo doc
 	rustdoc -o ./target/doc/rat README.md
+	rustdoc -o ./target/doc/rat RELEASES.md
 	@chromium ./target/doc/rat/index.html 2> /dev/null
 
 
@@ -63,14 +70,19 @@ git2:
 	git add -n .
 
 git3:
-	git add .
+	@echo "git add ."
 
 git4:
 	git status
 
 git5:
-	git commit
+	@echo "# First check version in Cargo.toml # make runv"
+	@echo "# and update RELEASES.md -- add date"
+	@echo "git commit -m 'vNNN summary'"
 
+git6:
+	@echo "git push -u origin main"
+	@echo "# Then update version in Cargo.toml"
 
 update:
 	cargo update
@@ -95,4 +107,5 @@ lint3b:
 	less clippy.err
 
 todo:
-	grep -riGHn "todo\|fixme" src/
+	-rg -iHn "todo\|fixme" src/
+	-grep -riHn "todo\|fixme" src/

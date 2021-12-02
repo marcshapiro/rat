@@ -6,6 +6,7 @@ use crate::bi::register_bi;
 use crate::brat::BRat;
 use crate::bst::{Bst, BstFile};
 use crate::cab::Cab;
+use crate::repl::run_repl;
 
 use std::env;
 use std::time::Instant;
@@ -17,8 +18,10 @@ pub fn standard_main() -> Result<(), String> {
 }
 
 fn call_file_arg(args: Vec<String>) -> Result<(), String> {
-    let opt = process_arguments(args)?;
-    call_file(&opt, true, true)?;
+    match process_arguments(args)? {
+        Some(opt) => { call_file(&opt, true, true)?; },
+        None => run_repl(),
+    }
     Ok(())
 }
 
@@ -37,17 +40,15 @@ fn add_use_last_call(bf: &mut BstFile, path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn prep_call(bf: &BstFile, load_auto: bool, load_use: bool) -> Result<(Cab, Bst), String> {
+fn prep_cab(bf: &BstFile, load_auto: bool, load_use: bool) -> Result<Cab, String> {
     let mut cab = Cab::new();
     register_bi(&mut cab)?;
     if load_auto {
-        cab.use_all_load("auto")?;
+        cab.load_autos()?;
     }
-    cab.load_file_rec("_main", "_main", bf, load_use)?;
     cab.postload()?;
-
-    let ecall = build_call_func("_main", "_main", vec![]);
-    Ok((cab, ecall))
+    cab.load_file_rec("_main", "_main", bf, load_use, false)?;
+    Ok(cab)
 }
 
 fn build_use(path: &str, func: &str, name: &str) -> (String, String, String) {
@@ -70,7 +71,8 @@ fn call_file(opt: &Opt, load_auto: bool, load_use: bool) -> Result<Bst, String> 
         Some(p) => add_use_last_call(&mut bf, p)?,
     }
 
-    let (mut cab, ecall) = prep_call(&bf, load_auto, load_use)?;
+    let mut cab = prep_cab(&bf, load_auto, load_use)?;
+    let ecall = build_call_func("_main", "_main", vec![]);
     let t1 = Instant::now();
 
     // call wrapper
@@ -104,7 +106,8 @@ fn out_result(res: &Bst, fmt: &OutFormat, load_auto: bool, load_use: bool) -> Re
                 let saycall = build_call_func("auto", "say", vec![deccall]);
                 let uses = vec![build_use("sys", "as_decimal", "")];
                 let outbf = BstFile { uses, decl: None, file: vec![saycall] };
-                let (mut dcab, dcall) = prep_call(&outbf, load_auto, load_use)?;
+                let mut dcab = prep_cab(&outbf, load_auto, load_use)?;
+                let dcall = build_call_func("_main", "_main", vec![]);
                 dcab.eval(&None, &dcall)?;
             },
         },
@@ -119,32 +122,36 @@ mod tests {
     // cfu() does a call_file without I/O, unless it is in the script
     // Only builtins are loaded.  'sys' builtins still need a 'use'.
     fn cfu(spath: &str, sscript: &str) -> Result<Bst, String> {
-        let path = if spath.is_empty() {
-            None
-        } else {
-            Some(spath.to_owned())
-        };
-        let fmt = OutFormat::None;
-        let time = false;
+        let path = if spath.is_empty() { None } else { Some(spath.to_owned()) };
         let script = sscript.to_owned();
-        let opt = Opt { path, script, fmt, time };
-        let load_auto = false;
-        let load_use = false;
-        call_file(&opt, load_auto, load_use)
+        let opt = Opt { path, script, fmt:OutFormat::None, time:false };
+        call_file(&opt, false, false)
     }
     fn cf(spath: &str, sscript: &str, xres: &str) {
-        let r = cfu(spath, sscript).unwrap();
-        assert_eq!(format!("{}", r), xres);
+        assert_eq!(format!("{}",  cfu(spath, sscript).unwrap()), xres);
     }
     fn xf(spath: &str, sscript: &str, xerr: &str) {
-        let e = cfu(spath, sscript).unwrap_err();
-        assert_eq!(e, xerr);
+        assert_eq!(cfu(spath, sscript).unwrap_err(), xerr);
     }
 
     #[test] fn cf1() { cf("", "1 + 2", "3"); }
     #[test] fn cf2() { cf("sys", "is_char(-1)", "0"); }
     #[test] fn cf3() { cf("", "", "0"); }
+    #[test] fn cf4() { cf("", "1+2", "3"); }
+    #[test] fn cf5() { cf("", "-3^2", "-9"); }
     #[test] fn xf1() { xf("sys", "let x = is_char(-1)",
         "-sys requires script ending call"); }
     #[test] fn xf2() { xf("usr", "", "-usr requires non-empty script"); }
+    #[test] fn buselast1() {
+        let func = Bst::Func("a".to_owned(), "b".to_owned());
+        let call = Bst::Call(Box::new(func), vec!());
+        let mut bf = BstFile { uses: vec![], decl: None, file: vec![call] };
+        let e = add_use_last_call(&mut bf, "path").unwrap_err();
+        assert_eq!(e, "-path requires script ending call to name");
+    }
+    #[test] fn cfu1() {
+        let b = cfu("sys", "unparse(if a { 1 })").unwrap();
+        let t = b.d_list_text("_t").unwrap();
+        assert_eq!(t, "when {\n  a => {\n    1\n  }\n} else {\n    \n}\n");
+    }
 }

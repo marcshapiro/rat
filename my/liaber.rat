@@ -4,6 +4,7 @@ mutable x = 2; # x coord
 mutable y = 2; # y coord
 mutable g = 0; # gold coin count
 mutable cmd = ''; # input
+mutable cmd2 = ''; # rewritten input
 mutable go = 1; # true after a valid command
 let ew_size = 5; # room dimensions # Note: The room is not really big.
 let ns_size = 5;
@@ -16,7 +17,14 @@ loop {
     };
     update go = 0;
     update cmd = inputkey('Your wish is a command [newsq]> ');
-    case list[cmd] {
+    update cmd2 = case cmd { # map special keys
+        27 => 113; # escape is q
+        8592 => 119; # left arrow is w
+        8593 => 110; # up arrow is n
+        8594 => 101; # right arrow is e
+        8595 => 115; # down arrow is s
+    } else { cmd };
+    case list[cmd2] {
        'e' => {
             if x < ew_size {
                 update x = x + 1;

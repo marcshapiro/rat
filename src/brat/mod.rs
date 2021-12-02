@@ -547,9 +547,9 @@ mod tests {
     #[test] fn brat21() { ckbr(BRat::from_str("1./2").unwrap(), "1/2"); }
     #[test] fn brat22() { ckbr(BRat::from_str("1e+0").unwrap(), "1"); }
     #[test] fn brat23() { ckbr(BRat::from_str("1/0023e001").unwrap(), "1/230"); }
-    #[test] fn brat24() { ckbr(BRat::from_str("1/2.0").unwrap(), "1/2"); } // FIXME
-    #[test] fn brat25() { ckbr(BRat::from_str("2./001.01e1").unwrap(), "20/101"); } // FIXME
-    #[test] fn brat26() { ckbr(BRat::from_str("1/1.01").unwrap(), "100/101"); } // FIXME
+    #[test] fn brat24() { ckbr(BRat::from_str("-1/2.0").unwrap(), "-1/2"); }
+    #[test] fn brat25() { ckbr(BRat::from_str("2./001.01e1").unwrap(), "20/101"); }
+    #[test] fn brat26() { ckbr(BRat::from_str("1/1.01").unwrap(), "100/101"); }
 
 
     #[test] fn is_finite1() { assert_eq!(BRat::zero().is_finite(), true); }

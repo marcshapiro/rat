@@ -15,7 +15,7 @@ pub(super) struct Opt {
     pub time: bool,
 }
 
-pub(super) fn process_arguments(args: Vec<String>) -> Result<Opt, String> {
+pub(super) fn process_arguments(args: Vec<String>) -> Result<Option<Opt>, String> {
     let mut options = true; // --
     let mut path = None; // -sys -std -usr -my
     let mut sfmt = None; // -quiet -text -decNNN
@@ -55,7 +55,12 @@ pub(super) fn process_arguments(args: Vec<String>) -> Result<Opt, String> {
     }
 
     let script = match stmts {
-        None => return Err("No script specified".to_owned()),
+        None => {
+            if None == path && None == sfmt && None == stime {
+                return Ok(None);
+            }
+            return Err("No script specified".to_owned());
+        },
         Some(s) => s,
     };
     let fmt = match sfmt {
@@ -72,7 +77,7 @@ pub(super) fn process_arguments(args: Vec<String>) -> Result<Opt, String> {
     };
     let time = stime.is_some();
 
-    Ok(Opt{path, script, fmt, time})
+    Ok(Some(Opt{path, script, fmt, time}))
 }
 
 fn set_string(old: Option<String>, value: &str, jarg: usize) -> Result<Option<String>, String> {
@@ -86,7 +91,7 @@ fn set_string(old: Option<String>, value: &str, jarg: usize) -> Result<Option<St
 mod tests {
     use super::*;
 
-    fn pargs(inargs: Vec<&str>) -> Result<Opt, String> {
+    fn pargs(inargs: Vec<&str>) -> Result<Option<Opt>, String> {
         let mut sargs = vec![];
         for inarg in inargs.iter() {
             sargs.push((*inarg).to_owned());
@@ -94,7 +99,7 @@ mod tests {
         process_arguments(sargs)
     }
     fn args(inargs: Vec<&str>, xpath: &str, xfunc: &str, xfmt: Option<OutFormat>, xtime: bool) {
-        let opt = pargs(inargs).unwrap();
+        let opt = pargs(inargs).unwrap().unwrap();
         let xp = if xpath.is_empty() {
             None
         } else {
@@ -128,6 +133,7 @@ mod tests {
     #[test] fn arg13() { args(vec!["-v"], "sys", "rat_version()", Some(OutFormat::Text), false); }
     #[test] fn arg14() { args(vec!["-h"], "sys", "rat_help()", Some(OutFormat::None), false); }
     #[test] fn arg15() { args(vec!["--", "-5"], "", "-5", None, false); }
+    #[test] fn arg16() { assert!(pargs(vec![]).unwrap().is_none()); }
     #[test] fn barg1() { bargs(vec!["foo()", "-my"], "Argument 2: '-my' overwrites existing value 'foo()'"); }
     #[test] fn barg2() { bargs(vec!["-sys", "bar()", "-time"], "Argument 3: '-time' overwrites existing value 'bar()'"); }
     #[test] fn barg3() { bargs(vec!["-sys", "-sys", "bar()"], "Argument 2: 'sys' overwrites existing value 'sys'"); }
@@ -137,6 +143,5 @@ mod tests {
     #[test] fn barg7() { bargs(vec!["-quiet", "-text", "bar()"], "Argument 2: 'text' overwrites existing value 'quiet'"); }
     #[test] fn barg8() { bargs(vec!["-foo", "foo()"], "Argument 1 '-foo': unknown option"); }
     #[test] fn barg9() { bargs(vec!["-5"], "Argument 1 '-5': unknown option"); }
-    #[test] fn barg10() { bargs(vec![], "No script specified"); }
     #[test] fn barg11() { bargs(vec!["-quiet", "-sys"], "No script specified"); }
 }

@@ -251,7 +251,7 @@ impl fmt::Display for Bst {
                     write!(f, "  {} => ", cond)?;
                     write_vec(f, "{\n    ", thyn, ";\n    ", "\n  }\n")?;
                 }
-                write_vec(f, "}  else {\n    ", elze, ";\n    ", "\n  }\n")
+                write_vec(f, "} else {\n    ", elze, ";\n    ", "\n}\n")
             },
         }
     }
@@ -260,6 +260,7 @@ impl fmt::Display for Bst {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cab::Cab;
     use crate::parse::{parse_str_to_ast_stmt};
     fn pa(s: &str) -> Result<Ast, String> { parse_str_to_ast_stmt(s, "_test_") }
     fn pb(s: &str) -> Result<Bst, String> { Bst::from_str_stmt(s, "_test_") }
@@ -273,7 +274,7 @@ mod tests {
         assert_eq!(format!("{}", pb(x).unwrap()), x);
     }
     #[test] fn fast3() {
-        let x = "when {\n  1 => {\n    0\n  }\n}  else {\n    \n  }\n";
+        let x = "when {\n  1 => {\n    0\n  }\n} else {\n    \n}\n";
         assert_eq!(format!("{}", pb(x).unwrap()), x);
     }
     #[test] fn fast4() {
@@ -300,7 +301,6 @@ mod tests {
         assert_eq!(upath, "std");
         assert_eq!(ufile, "oil");
         assert_eq!(uas, "oil");
-        //let (ofname, args, dots, sdots) = bf.decl.unwrap();
         let fdecl = bf.decl.unwrap();
         assert_eq!(fdecl.oname.unwrap(), "q");
         assert_eq!(fdecl.named.len(), 2);
@@ -336,7 +336,9 @@ mod tests {
         assert_eq!(e, "_t: not a List: Rat");
     }
     #[test] fn dltext1() {
-        let e = pb("list[65, -1]").unwrap().d_list_text("_t").unwrap_err();
+        let b1 = pb("list[65, -1]").unwrap();
+        let b2 = Cab::taxi(true).raw_call(vec![b1], vec![]).unwrap();
+        let e = b2.d_list_text("_t").unwrap_err();
         assert_eq!(e, "_t elt 2: not Char: -1");
     }
     #[test] fn dltext2() {
@@ -352,7 +354,8 @@ mod tests {
         assert_eq!(e, "_t: not an Int: 1/2");
     }
     #[test] fn drnnint1() {
-        let e = pb("-1").unwrap().d_rat_nonneg_int("_t").unwrap_err();
+        let b = Bst::Rat(BRat::from_i32(-1));
+        let e = b.d_rat_nonneg_int("_t").unwrap_err();
         assert_eq!(e, "_t: not a Nonnegative Int: -1");
     }
     #[test] fn drpint1() {

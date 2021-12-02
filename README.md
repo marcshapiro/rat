@@ -2,7 +2,6 @@
 `rat` is an interpreter for a toy programming language, also called `rat`,
 which uses rational numbers of unlimited precision.
 
-
 ### Code snippet
 ```rat
 let pi = 3.14159265358793238462643383279502884197169399375;
@@ -67,6 +66,7 @@ cargo run -- -v # 'rat v0.0.1'
 cargo run -- -text -sys "rat_version()" # equivalent to above
 cargo run -- -h # brief command-line help
 cargo run -- -quiet -sys "rat_help()" # equivalent to above
+cargo run # with no options, this invokes the REPL, documented in the appendix
 ```
 
 ## Types in `rat`
@@ -291,18 +291,6 @@ The comparison operators ( `==`, `<`, etc.) work on any types.  Lists
 sort orthographically.  Functions sort like their `path/name`.
 And any `Function` is less than any `Rat` which is less than any `List`.
 
-#### Parsing (lexing) shortcomings
-
-In `+1` or `-2`, the sign is not an operator; it is just part of the `Rat`
-literal.  That occasinally leads to bad parses.  To work around that, you
-can add spaces, an explicit sign, or parentheses.
-
-| Bad expression | Unintended result | Workaround |
-| --- | ------ | ---- |
-| `x-1` | error: `x -1` | use: `x - 1` or `x- 1` or `x-(1)` or `x-+1` |
-| `x+1` | error: `x 1` | use: `x + 1` or `x+ 1` or `x+(1)` or `x++1` |
-| `-3^2` | wrong: `(-3)^2` | use: `- 3^2` or `-(3^2)` or `-+3^2` |
-
 ### `use`
 If function A wants to call function B, function A must have a `use` statement
 at the top level (i.e., not within a `loop` or `if`, etc.) referencing A.
@@ -491,6 +479,9 @@ it is a generalization of `sum`.
 - `replace_element(L, i, e2)` replaces the element of `L` at index `i` with `e2`
 - `replace_sublist(L1, i, n, L2)` replaces the sublist of `L` starting at
 index `i` of length `n` with the new sublist `L2`
+- `show_usable` lists functions that are not used
+- `show_used` lists functions that are used (and `auto` functions)
+- `show_vars` lists variables and constants
 - `sign(r)` return `+1`, `0`, `-1` or `nan` to represent the sign of `r`
 - `tree_text(lazy a)` converts an expression to `Text`
 - `var_name(lazy v)` converts a constant, variable, or function name to `Text`
@@ -499,9 +490,50 @@ index `i` of length `n` with the new sublist `L2`
 at index `i` of length `n`.
 
 #### `std` functions
+- `exp(r, eps)` within `eps` of e^r
+- `log(r, eps)` within `eps` of ln(r)
 - `prod(L)` - product of all elements of `L`
-- `root(r, i, e)` returns a value within `e` of the `i`th root of `r`.
+- `root(r, i, eps)` returns a value within `eps` of the `i`th root of `r`.
+- `sin(r, eps)` within `eps` of sin(r), for r in radians.
 - `sum(L)` - sum of all elements of `L`
+
+#### Philosophy
+
+Some functions, like the operators, are guaranteed to have rational results.
+Others, like `root(r, n, eps)` in general have real results, not just
+rational ones.  For example, the square root of 3 is not a rational number.
+Those functions all have an additional parameter `eps`, and strive to return
+a rational number within `eps` of the actual value.  So `root(3, 2, 1e-5)`
+cannot be the squart root of 3, but it should be within `1e-5` of it.
+
+Similarly, `as_decimal(r, n)` (and the related options on the
+command line and in the REPL) specifies the number of decimal places.
+
+In `rat`, if you are not explicitly specifying the error, the calculation
+should be exact.
+
+The inspiration behind `rat` is the observation that in most programming
+languages, exact rationals are far too hard to use, despite being easy to
+reason about.  And limited range integers are far to easy to
+use, despite being somewhat hard to reason about.  And floating point numbers
+are just as easy to use, despite being very hard to reason about.
+By contrast, the `rat` language, of course, makes exact rationals easy to use.
+It doesn't include floating point numbers at all, but does make numeric
+approximations a little hard to use in that one needs to explicitly specify
+the `eps` parameters.
+
+Note that all of the approximate functions are implemented in the `rat`
+language itself (in `sys` or `std`), not as built-in functions implemented
+in Rust.  I think they demonstrate that the performance of `rat` is
+sufficient for most general programming purposes.  And `rat` is very much
+a toy language; it does not do any optimization at all.
+
+Disclaimer: I wrote all such functions quickly and carelessly.  They are
+probaby not efficient, and may even be entirely wrong.  In particular, I did
+not make any attempt to prove that they correctly met the `eps` bound.
+
+Broader disclaimer: The rest of the system is also likely riddled with bugs,
+not just the approximate functions.
 
 #### Keywords and cheat sheet
 The `rat` keywords are
@@ -539,6 +571,110 @@ increasing denominators
 #### `usr` functions
 - `fact_rec`, `fact_loop` - two factorial implementations
 - `fib_rec`, `fib_loop` - two fibonacci implementations
+
+### Functions by category
+
+- Types: sys/is_bool, sys/is_char, sys/is_function, sys/is_int, sys/is_list,
+sys/is_rat, sys/is_text
+- List: catenate, (each syntax), element, sys/every, sys/filter,
+sys/insert_sublist, length, op_add (infix +), sys/reduce, sys/replace_element,
+sys/replace_sublist, reverse, sublist, sys/without_sublist
+- Bools: op_and (&&), op_not (!), op_or (||)
+- List of Bool: sys/all, sys/any
+- Rat:  sys/abs, sys/as_decimal, sys/as_text_sci, denominator, std/exp,
+sys/is_finite, std/log, sys/modulo, numerator, op_add (infix +), op_div (/), op_mul (*),
+op_neg (prefix -), op_pow (^), op_sub (infix -), std/root, round, sys/sign, std/sin
+- List of Rat: std/prod, std/sum
+- Any: as_text, op_eq (==), op_ge (>=), op_gt (>), op_le (<=), op_lt (<),
+op_ne (<>); and prefix + syntax
+- Control flow: sys/gbye, must, sys/nyi (and lots of syntax)
+- I/O: inkey, inp, input, sys/inputkey, out, sys/outm, sys/outn, sys/outs, say
+- Interactive: sys/show_usable, sys/show_used, sys/show_vars
+- Meta: sys/eval, sys/is_mutable, sys/is_var, sys/parse, sys/rat, sys/rat_help,
+sys/rat_version,
+sys/tree_text, sys/var_name, sys/variable
+- Examples: usr/atan_v1, my/liaber, usr/fact_loop, usr/fact_rec, usr/fib_loop,
+usr/fib_rec, usr/log_v1, my/pi_approx, usr/pow_v1
+
+### The `rat` REPL
+
+Running `rat` with no arguments starts the REPL for an interactive session.
+```sh
+cargo run
+```
+It then displays the prompt, where you can type `rat` statements or expressions.
+Those statements are executed, and the results displayed.
+```rat
+rat> 5/3 + 2/5
+31/15
+rat> let x = 5
+0
+rat> x
+5
+rat> say(as_text(x+2))
+7
+0
+rat> quit
+```
+The REPL session can be exited by entering `quit`, or hitting Control-D or
+Control-C.
+
+Note that in `rat`, statements without an obvious value, such as `let` or
+`say()` return 0, which is displayed.
+
+The repl starts with `auto` functions available, as well as these from `sys`:
+`as_decimal`, `rat_version`, `show_usable`, `show_used`, `show_vars`.
+
+To use others, enter the appropriate `use` statement.
+```rat
+rat> root(2, 2, 1e-5)
+Error: Cab::atget[0]: root: not a variable or function
+rat> use std root
+0
+rat> root(2, 2, 1e-5)
+46341/32768
+```
+
+You can include start-up statements in `my/start.repl` if you want to use
+particular functions, or modify the initial values of the REPL variables
+(discussed below).
+
+The repl supports multi-statement scripts.
+```rat
+rat> use std root; let a = 2; let eps = 1e-5; root(a, 2, eps)
+46341/32768
+```
+However, there is no support for multi-line scripts.  Each line must be
+complete on its own.
+
+Comments are ignored
+```rat
+rat> 3 # 4
+3
+```
+But `quit` is specially processed by the repl, so `quit # do not` and
+`if 1 { quit }` will not work.
+
+You can reenter previous commands, editing them as needed, using the arrow
+keys.  The up arrow key moves backwards through the command history.
+
+Hitting tab once will complete a word, to the unambiguous parts of the
+names in show_vars, show_used, and show_usable.  Hitting it again will
+display the tails of the ambiguous parts.
+
+The command history is saved between runs of the REPL.
+
+#### REPL variables
+
+The REPL uses several mutable variables.
+- `ans` is automatically set to the result of the last statement executed.
+- `repl_time`, initially 0, can be updated to 1 to display load and run
+times for each statement executed.  And it can be updated back to 0 to
+disable displaying the times.
+- `repl_format`, initially `''`, can be set to `'text'` or `'dec'` or `'quiet'`
+to control the display of each result, much like the command-line options.
+- `repl_digits`, initially `20` determines the number of digits displayed
+when `repl_format` is `'dec'`
 
 ### Automated testing
 `rat` has a primitive automated testing facility.  It has many limitations,
@@ -642,8 +778,7 @@ can still be specified explicitly.
 
 ### Operating systems
 
-I believe that `rat` will not compile under Windows.
-This limitation comes from the implementation of one built-in
-function (`inkey`) which is not particularly important (it captures a keypress
-from the keyboard).  It should be easy to make that an optional feature,
-or even find a way to implement it on Windows; but I have not done so.
+`rat` should compile and run under Windows now, but that is untested.
+
+`rat` was developed in Ubuntu Linux, but should compile and run on most
+unix-y operating systems, including OS X / macOS.

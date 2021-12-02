@@ -1,12 +1,13 @@
 // built-in functions
-mod ink;
-use self::ink::{inkey, inline, flush_stdout};
+mod io;
+use self::io::{inkey, inline, flush_stdout};
 
 use crate::brat::BRat;
 use crate::bst::Bst;
 use crate::cab::Cab;
 
 extern crate termios;
+use std::collections::HashMap;
 
 pub fn register_bi(cab: &mut Cab) -> Result<(), String> {
     cab.add_bi("auto", "as_text(a)", bi_as_text)?;
@@ -37,8 +38,11 @@ pub fn register_bi(cab: &mut Cab) -> Result<(), String> {
     cab.add_bi("sys", "rat_version()", bi_rat_version)?;
     cab.add_bi("auto", "reverse(L)", bi_reverse)?;
     cab.add_bi("auto", "round(r)", bi_round)?;
+    cab.add_bi("sys", "show_usable()", bi_show_usable)?;
+    cab.add_bi("sys", "show_used()", bi_show_used)?;
+    cab.add_bi("sys", "show_vars()", bi_show_vars)?;
     cab.add_bi("auto", "sublist(L, ix, n)", bi_sublist)?;
-    cab.add_bi("sys", "tree_text(lazy a)", bi_tree_text)?;
+    cab.add_bi("sys", "unparse(lazy a)", bi_unparse)?;
     cab.add_bi("sys", "var_name(lazy v)", bi_var_name)?;
     cab.add_bi("sys", "variable(t)", bi_variable)?;
     Ok(())
@@ -46,7 +50,7 @@ pub fn register_bi(cab: &mut Cab) -> Result<(), String> {
 
 // is_text(as_text(a)) # eval(a) == parse(as_text(a))
 fn bi_as_text(cab: &mut Cab, idx: &Option<(usize, BRat)>, args: Vec<Bst>) -> Result<Bst, String> {
-    bi_tree_text(cab, idx, args)
+    bi_unparse(cab, idx, args)
 }
 
 fn bi_catenate(_cab: &mut Cab, _idx: &Option<(usize, BRat)>, args: Vec<Bst>) -> Result<Bst, String> {
@@ -207,6 +211,36 @@ fn bi_round(_cab: &mut Cab, _idx: &Option<(usize, BRat)>, args: Vec<Bst>) -> Res
     Ok(Bst::Rat(args[0].d_rat("round")?.round()))
 }
 
+fn bi_show_usable(cab: &mut Cab, idx: &Option<(usize, BRat)>, _args: Vec<Bst>) -> Result<Bst, String> {
+    let usable = cab.get_usable(idx)?;
+    for key in sorted_keys(&usable) {
+        let is_loaded = usable.get(key).unwrap();
+        let (path, func) = key;
+        let loadc = if *is_loaded { "<" } else { ">" };
+        println!("{} {}/{}", loadc, path, func);
+    }
+    Ok(Bst::zero())
+}
+
+fn bi_show_used(cab: &mut Cab, idx: &Option<(usize, BRat)>, _args: Vec<Bst>) -> Result<Bst, String> {
+    let used = cab.get_used(idx)?;
+    for name in sorted_keys(&used) {
+        let (path, func) = used.get(name).unwrap();
+        println!("{} = {}/{}", name, path, func);
+    }
+    Ok(Bst::zero())
+}
+
+fn bi_show_vars(cab: &mut Cab, idx: &Option<(usize, BRat)>, _args: Vec<Bst>) -> Result<Bst, String> {
+    let vars = cab.get_vars(idx)?;
+    for name in sorted_keys(&vars) {
+        let (is_const, variant) = vars.get(name).unwrap();
+        let mut_star = if *is_const { " " } else { "*" };
+        println!("{} {}: {}", mut_star, name, variant);
+    }
+    Ok(Bst::zero())
+}
+
 fn bi_sublist(_cab: &mut Cab, _idx: &Option<(usize, BRat)>, args: Vec<Bst>) -> Result<Bst, String> {
     let av = args[0].d_list("sublist arg 1")?;
     let ix = args[1].d_rat_pos_usize("sublist arg 2")? - 1;
@@ -220,20 +254,19 @@ fn bi_sublist(_cab: &mut Cab, _idx: &Option<(usize, BRat)>, args: Vec<Bst>) -> R
 }
 
 // Bst -> Text
-fn bi_tree_text(_cab: &mut Cab, _idx: &Option<(usize, BRat)>, args: Vec<Bst>) -> Result<Bst, String> {
-    Ok(string_to_text(&format!("{}", &args[0])))
+fn bi_unparse(_cab: &mut Cab, _idx: &Option<(usize, BRat)>, args: Vec<Bst>) -> Result<Bst, String> {
+    Ok(string_to_text(&format!("{}", &args[0].d_closure())))
 }
 
-// Bst::Name -> Text // Q: Is this always the same as tree_text when it doesn't fail?
+// Bst::Name -> Text // Q: Is this always the same as unparse when it doesn't fail?
 fn bi_var_name(_cab: &mut Cab, _idx: &Option<(usize, BRat)>, args: Vec<Bst>) -> Result<Bst, String> {
-    let s = args[0].d_name("var_name")?;
+    let s = args[0].d_closure().d_name("var_name")?;
     Ok(string_to_text(&s))
 }
 
 // Text -> Bst::Name
 fn bi_variable(_cab: &mut Cab, _idx: &Option<(usize, BRat)>, args: Vec<Bst>) -> Result<Bst, String> {
     let s = args[0].d_list_text("variable")?;
-    // TODO: check valid name
     Ok(Bst::Name(s))
 }
 
@@ -297,30 +330,38 @@ fn string_to_text(s: &str) -> Bst {
     )
 }
 
+pub fn sorted_keys<K: std::cmp::Ord, V>(hmap: &HashMap<K, V>) -> Vec<&K> {
+    let mut keys: Vec<&K> = hmap.keys().collect();
+    keys.sort();
+    keys
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::cab::BiType;
-    use std::collections::HashMap;
 
-    fn taxi() -> Cab {
-        let mut cab = Cab::new();
-        cab.push(HashMap::new());
-        cab
-    }
-    fn hail(cab: &mut Cab, bif: BiType, targs: Vec<&str>) -> Result<Bst, String> {
+    fn fare(cab: &mut Cab, bif: BiType, targs: Vec<&str>, reduce: bool) -> Result<Bst, String> {
         let mut bargs = vec![];
         for targ in targs.iter() {
-            bargs.push(Bst::from_str_stmt(targ, "_test_").unwrap());
+            let b1 = Bst::from_str_stmt(targ, "_test_").unwrap();
+            let b2 = if reduce { cab.raw_call(vec![b1], vec![])? } else { b1 };
+            bargs.push(b2);
         }
         bif(cab, &None, bargs)
+    }
+    fn hail(cab: &mut Cab, bif: BiType, targs: Vec<&str>) -> Result<Bst, String> {
+        fare(cab, bif, targs, false)
     }
     fn call(bif: BiType, targs: Vec<&str>) -> Result<Bst, String> {
         hail(&mut Cab::new(), bif, targs)
     }
     fn cnc(bif: BiType, targs: Vec<&str>, xres: &str) {
         let btext = format!("{}", call(bif, targs).unwrap());
+        assert_eq!(btext, xres);
+    }
+    fn enc(bif: BiType, targs: Vec<&str>, xres: &str) {
+        let btext = format!("{}", fare(&mut Cab::taxi(true), bif, targs, true).unwrap());
         assert_eq!(btext, xres);
     }
     fn xnx(bif: BiType, targs: Vec<&str>, xerr: &str) {
@@ -344,7 +385,7 @@ mod tests {
     #[test] fn den4() { cnc(bi_denominator, vec!["nan"], "0"); }
     #[test] fn den5() { cnc(bi_denominator, vec!["4/2"], "1"); }
     #[test] fn den6() { cnc(bi_denominator, vec!["3/2"], "2"); }
-    #[test] fn den7() { cnc(bi_denominator, vec!["-3/2"], "2"); }
+    #[test] fn den7() { enc(bi_denominator, vec!["-3/2"], "2"); }
     #[test] fn den8() { cnc(bi_denominator, vec!["1/3"], "3"); }
     #[test] fn elt1() { cnc(bi_element, vec!["list[4]", "1"], "4"); }
     #[test] fn elt2() { cnc(bi_element, vec!["list[4, 5, 6]", "1"], "4"); }
@@ -383,9 +424,9 @@ mod tests {
     #[test] fn islst5() { cnc(bi_is_list, vec!["'abc'"], "1"); }
     #[test] fn israt1() { cnc(bi_is_rat, vec!["0"], "1"); }
     #[test] fn israt2() { cnc(bi_is_rat, vec!["1"], "1"); }
-    #[test] fn israt3() { cnc(bi_is_rat, vec!["-1"], "1"); }
+    #[test] fn israt3() { enc(bi_is_rat, vec!["-1"], "1"); }
     #[test] fn israt4() { cnc(bi_is_rat, vec!["1/2"], "1"); }
-    #[test] fn israt5() { cnc(bi_is_rat, vec!["-5/3"], "1"); }
+    #[test] fn israt5() { enc(bi_is_rat, vec!["-5/3"], "1"); }
     #[test] fn israt6() { cnc(bi_is_rat, vec!["nan"], "1"); }
     #[test] fn israt7() { cnc(bi_is_rat, vec!["inf"], "1"); }
     #[test] fn israt8() { cnc(bi_is_rat, vec!["-inf"], "1"); }
@@ -396,25 +437,25 @@ mod tests {
     #[test] fn len4() { cnc(bi_length, vec!["list[5, list[]]"], "2"); }
     #[test] fn len5() { cnc(bi_length, vec!["list[11, 12, 13, 14, 15]"], "5"); }
     #[test] fn ismut1() {
-        let mut cab = taxi();
+        let mut cab = Cab::taxi(false);
         cab.atput("foo", &None, true, true, Bst::one()).unwrap();
         let res = hail(&mut cab, bi_is_mutable, vec!["foo"]).unwrap();
         assert_eq!(res, Bst::zero());
     }
     #[test] fn ismut2() {
-        let mut cab = taxi();
+        let mut cab = Cab::taxi(false);
         cab.atput("bar", &None, true, false, Bst::zero()).unwrap();
         let res = hail(&mut cab, bi_is_mutable, vec!["bar"]).unwrap();
         assert_eq!(res, Bst::one());
     }
     #[test] fn isvar1() {
-        let mut cab = taxi();
+        let mut cab = Cab::taxi(false);
         cab.atput("foo", &None, true, true, Bst::zero()).unwrap();
         let res = hail(&mut cab, bi_is_var, vec!["foo"]).unwrap();
         assert_eq!(res, Bst::one());
     }
     #[test] fn isvar2() {
-        let res = hail(&mut taxi(), bi_is_var, vec!["foo"]).unwrap();
+        let res = hail(&mut Cab::taxi(false), bi_is_var, vec!["foo"]).unwrap();
         assert_eq!(res, Bst::zero());
     }
     #[test] fn num1() { cnc(bi_numerator, vec!["0"], "0"); }
@@ -423,18 +464,18 @@ mod tests {
     #[test] fn num4() { cnc(bi_numerator, vec!["1/2"], "1"); }
     #[test] fn num5() { cnc(bi_numerator, vec!["1/5"], "1"); }
     #[test] fn num6() { cnc(bi_numerator, vec!["inf"], "1"); }
-    #[test] fn num7() { cnc(bi_numerator, vec!["-1"], "-1"); }
-    #[test] fn num8() { cnc(bi_numerator, vec!["-1/2"], "-1"); }
+    #[test] fn num7() { enc(bi_numerator, vec!["-1"], "-1"); }
+    #[test] fn num8() { enc(bi_numerator, vec!["-1/2"], "-1"); }
     #[test] fn num9() { cnc(bi_numerator, vec!["-inf"], "-1"); }
     #[test] fn oadd1() { cnc(bi_op_add, vec!["0", "0"], "0"); }
     #[test] fn oadd2() { cnc(bi_op_add, vec!["0", "1"], "1"); }
     #[test] fn oadd3() { cnc(bi_op_add, vec!["1", "0"], "1"); }
-    #[test] fn oadd4() { cnc(bi_op_add, vec!["-1", "1"], "0"); }
+    #[test] fn oadd4() { enc(bi_op_add, vec!["-1", "1"], "0"); }
     #[test] fn oadd5() { cnc(bi_op_add, vec!["list[1, 2]", "3"], "list[1, 2, 3]"); }
     #[test] fn oadd6() { xnx(bi_op_add, vec!["1", "list[]"],
         "op_add: not (Rat, Rat) or (List, Any): (Rat, List)"); }
     #[test] fn odiv1() { cnc(bi_op_div, vec!["6", "3"], "2"); }
-    #[test] fn odiv2() { cnc(bi_op_div, vec!["-6", "-3"], "2"); }
+    #[test] fn odiv2() { enc(bi_op_div, vec!["-6", "-3"], "2"); }
     #[test] fn odiv3() { cnc(bi_op_div, vec!["24", "9"], "8/3"); }
     #[test] fn ole1() { cnc(bi_op_le, vec!["0", "0"], "1"); }
     #[test] fn ole2() { cnc(bi_op_le, vec!["0", "1"], "1"); }
@@ -459,14 +500,13 @@ mod tests {
         let fab = Bst::Func("a".to_string(), "b".to_string());
         assert!(!op_le(&Bst::List(vec![]), &fab).unwrap());
     }
-    // TODO: le on other types
     #[test] fn omul1() { cnc(bi_op_mul, vec!["3", "5"], "15"); }
     #[test] fn oneg1() { cnc(bi_op_neg, vec!["0"], "0"); }
     #[test] fn oneg2() { cnc(bi_op_neg, vec!["nan"], "nan"); }
     #[test] fn oneg3() { cnc(bi_op_neg, vec!["inf"], "-inf"); }
     #[test] fn oneg4() { cnc(bi_op_neg, vec!["-inf"], "inf"); }
     #[test] fn oneg5() { cnc(bi_op_neg, vec!["12"], "-12"); }
-    #[test] fn oneg6() { cnc(bi_op_neg, vec!["-123"], "123"); }
+    #[test] fn oneg6() { enc(bi_op_neg, vec!["-123"], "123"); }
     #[test] fn opow1() { cnc(bi_op_pow, vec!["2", "3"], "8"); }
     #[test] fn parse1() { cnc(bi_parse, vec!["'1/2'"], "1/2"); }
     #[test] fn parse2() { cnc(bi_parse, vec!["'1/2 + 2/3'"], "op_add(1/2, 2/3)"); }
@@ -483,11 +523,11 @@ mod tests {
     #[test] fn rev3() { cnc(bi_reverse, vec!["list[2, 5]"], "list[5, 2]"); }
     #[test] fn rev4() { cnc(bi_reverse, vec!["'ABC'"], "list[67, 66, 65]"); }
     #[test] fn round1() { cnc(bi_round, vec!["3"], "3"); }
-    #[test] fn round2() { cnc(bi_round, vec!["-3"], "-3"); }
+    #[test] fn round2() { enc(bi_round, vec!["-3"], "-3"); }
     #[test] fn round3() { cnc(bi_round, vec!["3.4"], "3"); }
-    #[test] fn round4() { cnc(bi_round, vec!["-3.4"], "-3"); }
+    #[test] fn round4() { enc(bi_round, vec!["-3.4"], "-3"); }
     #[test] fn round5() { cnc(bi_round, vec!["3.6"], "4"); }
-    #[test] fn round6() { cnc(bi_round, vec!["-3.6"], "-4"); }
+    #[test] fn round6() { enc(bi_round, vec!["-3.6"], "-4"); }
     #[test] fn sublist1() { cnc(bi_sublist, vec!["list[11, 12, 13, 14]", "1", "0"], "list[]"); }
     #[test] fn sublist2() { cnc(bi_sublist, vec!["list[11, 12, 13, 14]", "4", "0"], "list[]"); }
     #[test] fn sublist3() { cnc(bi_sublist, vec!["list[11, 12, 13, 14]", "1", "1"], "list[11]"); }
@@ -498,11 +538,10 @@ mod tests {
     #[test] fn sublist8() { cnc(bi_sublist, vec!["list[11, 12, 13, 14]", "2", "3"], "list[12, 13, 14]"); }
     #[test] fn sublist9() { xnx(bi_sublist, vec!["list[1, 2, 3, 4, 5]", "3", "4"],
             "sublist: List length 5 less than ending index 6"); }
-    // TODO: tree_text
     #[test] fn vname1() { cnc(bi_var_name, vec!["a"], "list[97]"); }
     #[test] fn var1() { cnc(bi_variable, vec!["'a_2'"], "a_2"); }
     #[test] fn regbi1() {
-        let mut cab = taxi();
+        let mut cab = Cab::taxi(false);
         register_bi(&mut cab).unwrap();
         cab.netget("auto", "denominator").unwrap();
         cab.netget("sys", "is_char").unwrap();

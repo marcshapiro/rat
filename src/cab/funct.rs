@@ -33,10 +33,7 @@ impl Funct {
     }
     pub fn uses(&mut self, path: &str, func: &str, name: &str) -> Result<(), String> {
         match &mut self.funk {
-            Funky::Builtin(_) => {
-                // println!("Builtin {}/{} as {} cannot use", path, func, name);
-                Ok(())
-            },
+            Funky::Builtin(_) => Ok(()),
             Funky::Defined(used, _) => {
                 if used.contains_key(name) {
                     Err(format!("Cannot re-use as '{}'", name))
@@ -51,7 +48,6 @@ impl Funct {
         // validate arg count
         let n_act = args.len();
         let n_named = self.named.len();
-        // FIXME: display named as usage
         if self.dots {
             if n_act < n_named {
                 return Err(format!("Expected at least {} args, found {}", n_named, n_act));
@@ -110,11 +106,6 @@ impl Funct {
 mod tests {
     use super::*;
 
-    fn taxi() -> Cab {
-        let mut cab = Cab::new();
-        cab.push(HashMap::new());
-        cab
-    }
     fn bi1(_cab: &mut Cab, _idx: &Option<(usize, BRat)>, _args: Vec<Bst>)
             -> Result<Bst, String> {
         Ok(Bst::one())
@@ -140,13 +131,13 @@ mod tests {
     #[test] fn fn5() {
         let a1 = ("x".to_owned(), true);
         let f = Funct::defined(vec![Bst::one()], vec![a1], true, false);
-        let r = f.call(&vec![Bst::one(), Bst::one()], &mut taxi(), &None).unwrap();
+        let r = f.call(&vec![Bst::one(), Bst::one()], &mut Cab::taxi(false), &None).unwrap();
         assert_eq!(r, Bst::one());
     }
     #[test] fn fn6() {
         let a1 = ("x".to_owned(), true);
         let f = Funct::builtin(bi1, vec![a1], true, false);
-        let r = f.call(&vec![Bst::one(), Bst::one()], &mut taxi(), &None).unwrap();
+        let r = f.call(&vec![Bst::one(), Bst::one()], &mut Cab::taxi(false), &None).unwrap();
         assert_eq!(r, Bst::one());
     }
 }

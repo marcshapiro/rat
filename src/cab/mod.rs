@@ -6,11 +6,12 @@ use self::funct::Funct;
 use self::sea::Sea;
 
 use crate::ast::Ast;
+use crate::bi::register_bi;
 use crate::brat::BRat;
 use crate::bst::{Bst, BstFile, FuncDecl};
 use crate::parse::{parse_str_to_ast_function_decl};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub type BiType = fn(&mut Cab, &Option<(usize, BRat)>, Vec<Bst>) -> Result<Bst, String>;
 
@@ -65,7 +66,10 @@ impl Cab {
     }
     pub fn atget(&self, name: &str, idx: &Option<(usize, BRat)>) -> Result<Bst, String> {
         let ix = self.get_ix(idx)?;
-        self.seas[ix].get(name)
+        match self.seas[ix].get(name) {
+            Ok(a) => Ok(a),
+            Err(e) => Err(format!("{} in stack frame {}", e, ix)),
+        }
     }
     pub fn athas(&self, name: &str, idx: &Option<(usize, BRat)>) -> Result<bool, String> {
         let ix = self.get_ix(idx)?;
@@ -111,12 +115,11 @@ impl Cab {
             }
         }
     }
-    fn getremap(&self) -> HashMap<String, Vec<String>> {
-        let mut remap = HashMap::new();
-        for (path, fmap) in self.net.iter() {
-            remap.insert(path.clone(), fmap.keys().map(|s|s.to_owned()).collect());
+    fn auto_funcs(&self) -> Vec<String> {
+        match self.net.get("auto") {
+            None => vec![],
+            Some(fmap) => fmap.keys().map(|s|s.to_owned()).collect(),
         }
-        remap
     }
     fn getfunkts(&mut self) -> Vec<&mut Funct> {
         let mut funkts = vec![];
@@ -128,18 +131,29 @@ impl Cab {
         funkts
     }
     pub fn postload(&mut self) -> Result<(), String> {
-        let remap = self.getremap();
-        for funkt in self.getfunkts() {
-            match remap.get("auto") {
-                None => {},
-                Some(afuncs) => for afunc in afuncs.iter() {
-                    funkt.uses("auto", afunc, afunc)?;
-                }
+        let autos = self.auto_funcs();
+        let na = autos.len();
+        if 0 == na { return Ok(()); }
+        let mut funkts = self.getfunkts();
+        let nf = funkts.len();
+        if 0 == nf { return Ok(()); }
+        for afunc in &autos {
+            for funkt in &mut funkts {
+                funkt.uses("auto", afunc, afunc)?;
             }
         }
         Ok(())
     }
-    pub fn load_file(&mut self, path: &str, func: &str) -> Result<(), String> {
+    pub fn postload_one(&mut self, funkt: &mut Funct) -> Result<(), String> {
+        let autos = self.auto_funcs();
+        let na = autos.len();
+        if 0 == na { return Ok(()); }
+        for afunc in &autos {
+            funkt.uses("auto", afunc, afunc)?;
+        }
+        Ok(())
+    }
+    pub fn load_file(&mut self, path: &str, func: &str, is_auto: bool) -> Result<(), String> {
         if self.nethas(path, func) { // don't load twice
             return Ok(());
         }
@@ -149,10 +163,10 @@ impl Cab {
             Ok(s) => Bst::from_str_file(&s, path)?,
             Err(e) => return Err(format!("{}: failed to read file: {}", filename, e)),
         };
-        self.load_file_rec(path, func, &bf, true)?;
+        self.load_file_rec(path, func, &bf, true, is_auto)?;
         Ok(())
     }
-    pub fn load_file_rec(&mut self, path: &str, func: &str, bf: &BstFile, load_use: bool) -> Result<Funct, String> {
+    pub fn load_file_rec(&mut self, path: &str, func: &str, bf: &BstFile, load_use: bool, is_auto: bool) -> Result<Funct, String> {
         let fdecl = match &bf.decl {
             None => FuncDecl{ oname: None, named: vec![], has_dots: true, strict_dots: true },
             Some(fd) => fd.clone(),
@@ -167,17 +181,20 @@ impl Cab {
         for (upath, ufunc, uname) in &bf.uses {
             funkt.uses(upath, ufunc, uname)?;
         }
+        if !is_auto {
+            self.postload_one(&mut funkt)?;
+        }
         self.netput(path, func, funkt.clone())?;
         if load_use {
             for (upath, ufunc, _) in &bf.uses {
-                self.load_file(upath, ufunc)?;
+                self.load_file(upath, ufunc, is_auto)?;
             }
         }
         Ok(funkt)
     }
-    pub fn use_all_load(&mut self, path: &str) -> Result<(), String> { // FIXME: use_all_auto_load
-        for func in use_all_list(path)?.iter() {
-            self.load_file(path, func)?;
+    pub fn load_autos(&mut self) -> Result<(), String> {
+        for func in list_rat_funcs("auto")?.iter() {
+            self.load_file("auto", func, true)?;
         }
         Ok(())
     }
@@ -212,7 +229,8 @@ impl Cab {
                 match func {
                     Bst::Func(path, fname) => {
                         let funkt = self.netget(&path, &fname)?;
-                        Ok(funkt.call(vargs, self, idx)?)
+                        let result = funkt.call(vargs, self, idx)?;
+                        Ok(result)
                     },
                     _ => Err(format!("May only call a function: {}", func.variant())),
                 }
@@ -280,7 +298,7 @@ impl Cab {
             },
         }
     }
-    fn vec_eval(&mut self, idx: &Option<(usize, BRat)>, stmts: &[Bst]) -> Result<Bst, String> {
+    pub fn vec_eval(&mut self, idx: &Option<(usize, BRat)>, stmts: &[Bst]) -> Result<Bst, String> {
         let mut lastval = Bst::zero();
         for stmt in stmts {
             lastval = self.eval(idx, stmt)?;
@@ -291,35 +309,20 @@ impl Cab {
         }
         Ok(lastval)
     }
-
-}
-
-fn use_all_list(path: &str) -> Result<Vec<String>, String> {
-    let mut vv = vec![];
-    match std::fs::read_dir(path.to_owned()) {
-        Ok(rd) => for oentry in rd {
-            match oentry {
-                Err(e) => { return Err(format!("use all {}: Bad file: {}", path, e)); },
-                Ok(entry) => {
-                    if let Ok(filename) = entry.file_name().into_string() {
-                        if let Some(froot) = filename.strip_suffix(".rat") {
-                            vv.push(froot.to_owned());
-                        }
-                    }
-                },
-            }
-        },
-        Err(e) => { return Err(format!("use all {}: Failed: {}", path, e)); },
+    #[cfg(test)]
+    pub fn raw_call(&mut self, bbb: Vec<Bst>, uses: Vec<(&str, &str, &str)>) -> Result<Bst, String> {
+        let mut funkt = Funct::defined(bbb, vec![], false, true);
+        let m = self.net.get("auto").unwrap();
+        for afunc in m.keys() {
+            funkt.uses("auto", afunc, afunc)?;
+        }
+        for (upath, ufunc, uname) in uses {
+            funkt.uses(upath, ufunc, uname)?;
+        }
+        funkt.call(&[], self, &None)
     }
-    Ok(vv)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bi::register_bi;
-
-    fn taxi(use_bi: bool) -> Cab {
+    #[cfg(test)]
+    pub fn taxi(use_bi: bool) -> Cab {
         let mut cab = Cab::new();
         cab.push(HashMap::new());
         if use_bi {
@@ -327,21 +330,97 @@ mod tests {
         }
         cab
     }
+    fn env_use_use(&mut self, path: &str, func: &str, name: &str) -> Result<(), String> {
+        let f = Bst::Func(path.to_owned(), func.to_owned());
+        // Inserts into sea.vars not sea.used, but should be equivalent
+        self.atput(name, &None, true, true, f)
+    }
+    pub fn env_use(&mut self, path: &str, func: &str, name: &str) -> Result<(), String> {
+        self.env_use_use(path, func, name)?;
+        self.load_file(path, func, false)?;
+        Ok(())
+    }
+    pub fn limo(load_auto: bool) -> Result<Cab, String> {
+        let mut cab = Cab::new();
+        register_bi(&mut cab).unwrap();
+        if load_auto {
+            cab.load_autos()?;
+        }
+        cab.postload()?;
+        let autos = cab.auto_funcs();
+        let mut env = HashMap::new();
+        for afunc in &autos {
+            env.insert(afunc.to_owned(), ("auto".to_owned(), afunc.to_owned()));
+        }
+        cab.push(env);
+        Ok(cab)
+    }
+    pub fn get_used(&self, idx: &Option<(usize, BRat)>) -> Result<HashMap<String, (String, String)>, String> {
+        let ix = self.get_ix(idx)?;
+        Ok(self.seas[ix].get_used())
+    }
+    pub fn get_vars(&self, idx: &Option<(usize, BRat)>) -> Result<HashMap<String, (bool, String)>, String> {
+        let ix = self.get_ix(idx)?;
+        Ok(self.seas[ix].get_vars())
+    }
+    pub fn get_usable(&self, idx: &Option<(usize, BRat)>) -> Result<HashMap<(String, String), bool>, String> {
+        // used functions are excluded
+        let used = self.get_used(idx)?;
+        let mut func_set: HashSet<(String, String)> = HashSet::new();
+        for key in used.values() {
+            if !func_set.contains(key) {
+                func_set.insert(key.clone());
+            }
+        }
+        // loaded functions (net) are included as true
+        let mut usable = HashMap::new();
+        for (path, fmap) in &self.net {
+            if "auto" != path {
+                for func in fmap.keys() {
+                    let key = (path.to_owned(), func.to_owned());
+                    if !func_set.contains(&key) {
+                        usable.insert(key.clone(), true);
+                        func_set.insert(key);
+                    }
+                }
+            }
+        }
+        // unloaded functions (files) are included as false
+        for path in ["sys", "std", "usr", "my"] {
+            for func in list_rat_funcs(path)? {
+                let key = (path.to_owned(), func.to_owned());
+                if !func_set.contains(&key) {
+                    usable.insert(key, false);
+                }
+            }
+        }
+        Ok(usable)
+    }
+}
+
+fn list_rat_funcs(path: &str) -> Result<Vec<String>, String> {
+    let mut vv = vec![];
+    match std::fs::read_dir(path) {
+        Ok(rd) => for entry in rd.flatten() {
+            if let Ok(filename) = entry.file_name().into_string() {
+                if let Some(func) = filename.strip_suffix(".rat") {
+                    vv.push(func.to_owned());
+                }
+            }
+        },
+        Err(e) => { return Err(format!("auto: read_dir failed: {}", e)); },
+    }
+    Ok(vv)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
     fn pb(s: &str) -> Result<Bst, String> {
-        let mut cab = taxi(false);
+        let mut cab = Cab::taxi(false);
         let b = Bst::from_str_stmt(s, "_t").unwrap();
         cab.eval(&None, &b)
-    }
-    fn raw_call(cab: &mut Cab, bbb: Vec<Bst>, uses: Vec<(&str, &str, &str)>) -> Result<Bst, String> {
-        let mut funkt = Funct::defined(bbb, vec![], false, true);
-        let m = cab.net.get("auto").unwrap();
-        for afunc in m.keys() {
-            funkt.uses("auto", afunc, afunc)?;
-        }
-        for (upath, ufunc, uname) in uses {
-            funkt.uses(upath, ufunc, uname)?;
-        }
-        funkt.call(&[], cab, &None)
     }
 
     #[test] fn ev1() {
@@ -362,7 +441,7 @@ mod tests {
     }
     #[test] fn ev5() {
         let e = pb("x").unwrap_err();
-        assert_eq!(format!("{}", e), "x: not a variable");
+        assert_eq!(format!("{}", e), "x: not a variable or function in stack frame 0");
     }
     #[test] fn ev6() {
         let e = pb("if 1 { let x = 3; update x = 4; }").unwrap_err();
@@ -374,7 +453,7 @@ mod tests {
     }
     #[test] fn ev8() {
         let s = "if 1 { let x = 3; return x; }";
-        let mut cab = taxi(false);
+        let mut cab = Cab::taxi(false);
         let b = Bst::from_str_stmt(s, "_t").unwrap();
         let r = cab.eval(&Some((0, BRat::zero())), &b).unwrap();
         assert_eq!(format!("{}", r), "return 3")
@@ -405,22 +484,22 @@ mod tests {
     }
     #[test] fn ev14() {
         let b = Bst::from_str_stmt("1 + 2", "_t").unwrap();
-        let mut cab = taxi(true);
-        let r = raw_call(&mut cab, vec![b], vec![]).unwrap();
+        let mut cab = Cab::taxi(true);
+        let r = cab.raw_call(vec![b], vec![]).unwrap();
         assert_eq!(format!("{}", r), "3");
     }
     #[test] fn ev15() {
         let b = Bst::from_str_stmt("is_mutable(a)", "_t").unwrap();
-        let mut cab = taxi(true);
+        let mut cab = Cab::taxi(true);
         let u1 = ("sys", "is_mutable", "is_mutable");
-        let e = raw_call(&mut cab, vec![b], vec![u1]).unwrap_err();
+        let e = cab.raw_call(vec![b], vec![u1]).unwrap_err();
         assert_eq!(e, "a: not a variable");
     }
     #[test] fn ev16() {
         let b = Bst::from_str_stmt("is_mutable(is_mutable)", "_t").unwrap();
-        let mut cab = taxi(true);
+        let mut cab = Cab::taxi(true);
         let u1 = ("sys", "is_mutable", "is_mutable");
-        let r = raw_call(&mut cab, vec![b], vec![u1]).unwrap();
+        let r = cab.raw_call(vec![b], vec![u1]).unwrap();
         assert_eq!(format!("{}", r), "0");
     }
     #[test] fn ev17() {
@@ -430,6 +509,32 @@ mod tests {
     #[test] fn ev18() {
         let r = pb("let x = lazy 1 + 2").unwrap();
         assert_eq!(format!("{}", r), "0");
+    }
+    #[test] fn ev19() {
+        let e = pb("(5)(1)").unwrap_err();
+        assert_eq!(e, "May only call a function: Rat");
+    }
+    #[test] fn evf1() {
+        let bf = Bst::from_str_file("return 3", "_t").unwrap();
+        let r = Cab::taxi(false).eval_file(&None, &bf.file).unwrap();
+        assert_eq!(format!("{}", r), "3");
+    }
+    #[test] fn get_used1() {
+        let cab = Cab::limo(false).unwrap();
+        let used = cab.get_used(&None).unwrap();
+        let (path, func) = used.get("op_add").unwrap();
+        assert_eq!(path, "auto");
+        assert_eq!(func, "op_add");
+    }
+    #[test] fn get_vars1() {
+        let mut cab = Cab::taxi(false);
+        let b = Bst::from_str_stmt("let xtest = 1", "_t").unwrap();
+        cab.eval(&None, &b).unwrap();
+        let vars = cab.get_vars(&None).unwrap();
+        assert!(vars.contains_key("xtest"));
+        let (is_const, variant) = vars.get("xtest").unwrap();
+        assert!(is_const);
+        assert_eq!(variant, "Rat");
     }
 }
 

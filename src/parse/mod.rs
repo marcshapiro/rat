@@ -12,10 +12,7 @@ fn within_quotes(lex: &mut Lexer<Lexi>) -> String {
 }
 
 fn to_brat(lex: &mut Lexer<Lexi>) -> BRat {
-    match BRat::from_str(lex.slice()) {
-        Some(r) => r,
-        None => BRat::zero(),
-    }
+    BRat::from_str(lex.slice()).unwrap()
 }
 
 #[derive(Logos, Debug, PartialEq)]
@@ -23,7 +20,7 @@ enum Lexi {
     #[regex(r"'[^\n']*'", within_quotes)]
     TextLit(String),
 
-    #[regex(r"[+-]?[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?(/[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?)?", to_brat)]
+    #[regex(r"[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?(/[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?)?", to_brat)]
     RatLit(BRat),
 
     #[regex(r"[\t ]+", logos::skip)]
@@ -354,21 +351,19 @@ pub fn parse_str_to_ast_file(s: &str, filepath: &str) -> Result<Ast, String> {
             Some(Lexi::Err) => {
                 let sp = lex.span();
                 let cno = sp.end - lch;
-                return Err(format!("{}:{}:..{}: error in '{}'", filepath, lno, cno, lex.slice()));
+                return Err(format!("{}:{}:..{}: lex error in '{}'",
+                    filepath, lno, cno, lex.slice()));
             },
-            Some(t) => {
+            Some(t) => if psr.parse(retok(&t)?).is_err() {
                 let sp = lex.span();
                 let cno = sp.end - lch;
-                let tt = retok(&t);
-                if let Err(e) = psr.parse(retok(&t)?) {
-                    return Err(format!("{}:{}:..{} '{:?}' {:?} => {:?}: error: {:?}",
-                        filepath, lno, cno, lex.slice(), &t, tt, e));
-                }
+                return Err(format!("{}:{}:..{}: parse error in '{}'",
+                    filepath, lno, cno, lex.slice()));
             },
         }
     }
     match psr.end_of_input() {
-        Err(e) => Err(format!("{}: End of input error: {:?}", filepath, e)),
+        Err(e) => Err(format!("{}: end of input error: {:?}", filepath, e)),
         Ok(d) => Ok(d),
     }
 }
@@ -441,4 +436,28 @@ mod tests {
     #[test] fn let1() { psx("let x = lazy y"); }
     #[test] fn mut1() { psx("mutable x = lazy y"); }
     #[test] fn upd1() { psx("update x = lazy y"); }
+    #[test] fn badretok1() {
+        assert_eq!(retok(&Lexi::White).unwrap_err(), "Should skip White"); }
+    #[test] fn badretok2() {
+        assert_eq!(retok(&Lexi::Comment).unwrap_err(), "Should skip Comment"); }
+    #[test] fn badretok3() {
+        assert_eq!(retok(&Lexi::Line).unwrap_err(), "Should filter Line"); }
+    #[test] fn badretok4() {
+        assert_eq!(retok(&Lexi::Err).unwrap_err(), "Should filter Err"); }
+    #[test] fn badparse1() {
+        let e = parse_str_to_ast_file("@", "_t").unwrap_err();
+        assert_eq!(e, "_t:1:..1: lex error in '@'");
+    }
+    #[test] fn badparse2() {
+        let e = parse_str_to_ast_file("let", "_t").unwrap_err();
+        assert_eq!(e, "_t: end of input error: ()");
+    }
+    #[test] fn badparse3() {
+        let e = parse_str_to_ast_stmt("", "_t").unwrap_err();
+        assert_eq!(e, "Expected one statement, found 0");
+    }
+    #[test] fn badparse4() {
+        let e = parse_str_to_ast_file("update yourself {}", "_t").unwrap_err();
+        assert_eq!(e, "_t:1:..17: parse error in '{'");
+    }
 }

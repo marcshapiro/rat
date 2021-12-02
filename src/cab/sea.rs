@@ -6,7 +6,7 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Sea {
     id: BRat, // counter - unique identifier // checked in closure.eval
-    used: HashMap<String, (String, String)>, // use, use all, and 'function' // points to Cab.net
+    used: HashMap<String, (String, String)>, // use and 'function' // points to Cab.net
     vars: HashMap<String, (bool, Bst)>, // local variables (check names in used first)
 }
 
@@ -19,7 +19,7 @@ impl Sea {
             Some((path, func)) => Bst::Func(path.clone(), func.clone()),
             None => match self.vars.get(name) {
                 Some((_, bst)) => bst.clone(),
-                None => return Err(format!("{}: not a variable", name)),
+                None => return Err(format!("{}: not a variable or function", name)),
             },
         })
     }
@@ -58,4 +58,23 @@ impl Sea {
         }
     }
     pub fn id(&self) -> &BRat { &self.id }
+    pub fn get_used(&self) -> HashMap<String, (String, String)> {
+        let mut used = self.used.clone();
+        for (name, (is_const, bbb)) in &self.vars {
+            if let (true, Bst::Func(path, func)) = (is_const, bbb) {
+                used.insert(name.to_owned(), (path.to_owned(), func.to_owned()));
+            }
+        }
+        used
+    }
+    pub fn get_vars(&self) -> HashMap<String, (bool, String)> {
+        let mut vars = HashMap::new();
+        for (name, (is_const, bbb)) in &self.vars {
+            let variant = bbb.variant();
+            if !is_const || "Func" != variant {
+                vars.insert(name.to_owned(), (*is_const, variant.to_owned()));
+            }
+        }
+        vars
+    }
 }

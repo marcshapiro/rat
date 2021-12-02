@@ -1,5 +1,6 @@
 //! `rat` is an interpreter for a toy programming language which uses rational
-//! numbers of unlimited precision.  See [README](README.html) for details.
+//! numbers of unlimited precision.  See [README](README.html) for details,
+//! and [RELEASES](RELEASES.html) for release notes on the latest version.
 
 /// parse tree (Ast)
 mod ast;
@@ -13,6 +14,8 @@ mod bst;
 mod cab;
 /// lexer and parser: text to Ast
 mod parse;
+/// REPL
+mod repl;
 /// top-level
 mod run;
 /// display utilities
